@@ -6,14 +6,40 @@
             "type": "modifyHeaders",
             "requestHeaders": [
                 {
-                    "header": "Accept-Encoding",
+                    "header": "Origin",
+                    "operation": "remove"
+                },
+                {
+                    "header": "Sec-Fetch-Site",
                     "operation": "set",
-                    "value": "gzip, deflate, br"
+                    "value": "same-origin"
+                },
+                {
+                    "header": "Sec-Fetch-Mode",
+                    "operation": "set",
+                    "value": "cors"
+                }
+            ],
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                },
+                {
+                    "header": "Access-Control-Allow-Methods",
+                    "operation": "set",
+                    "value": "GET, HEAD, OPTIONS"
+                },
+                {
+                    "header": "Access-Control-Allow-Headers",
+                    "operation": "set",
+                    "value": "*"
                 }
             ]
         },
         "condition": {
-            "urlFilter": "*.m3u8",
+            "urlFilter": "*m3u8*",
             "resourceTypes": [
                 "xmlhttprequest",
                 "media",
@@ -28,14 +54,25 @@
             "type": "modifyHeaders",
             "requestHeaders": [
                 {
-                    "header": "Accept-Encoding",
+                    "header": "Origin",
+                    "operation": "remove"
+                },
+                {
+                    "header": "Sec-Fetch-Site",
                     "operation": "set",
-                    "value": "gzip, deflate, br"
+                    "value": "same-origin"
+                }
+            ],
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
                 }
             ]
         },
         "condition": {
-            "urlFilter": "*.mpd",
+            "urlFilter": "*mpd*",
             "resourceTypes": [
                 "xmlhttprequest",
                 "media",
@@ -50,8 +87,15 @@
             "type": "modifyHeaders",
             "requestHeaders": [
                 {
-                    "header": "Range",
+                    "header": "Origin",
                     "operation": "remove"
+                }
+            ],
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
                 }
             ]
         },
@@ -59,7 +103,52 @@
             "urlFilter": "*.ts",
             "resourceTypes": [
                 "media",
-                "other"
+                "other",
+                "xmlhttprequest"
+            ]
+        }
+    },
+    {
+        "id": 4,
+        "priority": 1,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                }
+            ]
+        },
+        "condition": {
+            "urlFilter": "*.mp4",
+            "resourceTypes": [
+                "media",
+                "other",
+                "xmlhttprequest"
+            ]
+        }
+    },
+    {
+        "id": 5,
+        "priority": 1,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "Access-Control-Allow-Origin",
+                    "operation": "set",
+                    "value": "*"
+                }
+            ]
+        },
+        "condition": {
+            "urlFilter": "*.webm",
+            "resourceTypes": [
+                "media",
+                "other",
+                "xmlhttprequest"
             ]
         }
     }

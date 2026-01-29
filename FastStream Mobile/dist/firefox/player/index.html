@@ -217,6 +217,65 @@
         .error-details {
             font-size: 12px;
             color: #888;
+            margin-bottom: 16px;
+        }
+
+        .error-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .error-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .error-btn.primary {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: #fff;
+        }
+
+        .error-btn.primary:hover {
+            background: linear-gradient(135deg, #45a049, #3d8b40);
+            transform: scale(1.05);
+        }
+
+        .error-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .error-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .copy-toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(76, 175, 80, 0.95);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .copy-toast.visible {
+            opacity: 1;
         }
 
         /* Stream Info Badge */
@@ -279,7 +338,14 @@
             <div class="error-icon">⚠️</div>
             <div class="error-message" id="errorMessage">Failed to load video</div>
             <div class="error-details" id="errorDetails"></div>
+            <div class="error-actions">
+                <button class="error-btn primary" id="copyUrlBtn">📋 Copy URL for External Player</button>
+                <button class="error-btn secondary" id="retryBtn">🔄 Retry</button>
+            </div>
         </div>
+
+        <!-- Copy Toast Notification -->
+        <div class="copy-toast" id="copyToast">URL copied to clipboard!</div>
 
         <!-- Controls Overlay -->
         <div class="controls-overlay" id="controlsOverlay">
@@ -296,6 +362,7 @@
                     <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
                 </div>
                 <div class="controls-right">
+                    <button class="control-btn" id="copyUrlControlBtn" title="Copy URL">📋</button>
                     <button class="control-btn" id="pipBtn" title="Picture-in-Picture">🖼</button>
                     <button class="control-btn" id="downloadBtn" title="Download">⬇</button>
                     <select class="quality-selector" id="qualitySelector">

@@ -10,16 +10,15 @@
         }
     },
     "permissions": [
+        "declarativeNetRequest",
+        "declarativeNetRequestWithHostAccess",
         "activeTab",
         "storage",
         "scripting",
-        "declarativeNetRequest",
-        "declarativeNetRequestWithHostAccess",
-        "webRequest",
-        "tabs"
+        "webRequest"
     ],
     "host_permissions": [
-        "<all_urls>"
+        "*://*/*"
     ],
     "background": {
         "service_worker": "background/background.mjs",
@@ -33,12 +32,13 @@
             "js": [
                 "content/content.js"
             ],
-            "run_at": "document_start"
+            "run_at": "document_end"
         }
     ],
     "web_accessible_resources": [
         {
             "resources": [
+                "player/index.html",
                 "player/*",
                 "icons/*"
             ],
@@ -60,14 +60,5 @@
         "16": "icons/icon-16.png",
         "48": "icons/icon-48.png",
         "128": "icons/icon-128.png"
-    },
-    "declarative_net_request": {
-        "rule_resources": [
-            {
-                "id": "stream_rules",
-                "enabled": true,
-                "path": "rules/stream_rules.json"
-            }
-        ]
     }
 }
