@@ -1,0 +1,34 @@
+{
+    "name": "faststream-mobile",
+    "version": "1.0.0",
+    "description": "High-performance streaming optimization for mobile browsers",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "node scripts/build.js",
+        "build:chrome": "node scripts/build.js --target=chrome",
+        "build:firefox": "node scripts/build.js --target=firefox",
+        "watch": "node scripts/build.js --watch",
+        "lint": "eslint .",
+        "test": "echo \"No tests specified\" && exit 0",
+        "package": "node scripts/package.js"
+    },
+    "keywords": [
+        "browser-extension",
+        "streaming",
+        "video",
+        "mobile",
+        "firefox",
+        "chrome"
+    ],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "eslint": "^8.56.0",
+        "terser": "^5.26.0",
+        "archiver": "^6.0.1"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

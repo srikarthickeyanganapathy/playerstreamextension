@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastStream Mobile</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="popup-container">
+        <header class="popup-header">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>FastStream</h1>
+            </div>
+            <span class="version">v1.0.0</span>
+        </header>
+
+        <main class="popup-content">
+            <!-- Master Toggle -->
+            <div class="setting-row master-toggle">
+                <div class="setting-info">
+                    <span class="setting-label">Enable FastStream</span>
+                    <span class="setting-desc">Optimize all video streams</span>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="masterToggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <!-- Detected Videos Section -->
+            <div class="detected-section" id="detectedSection">
+                <h2>
+                    <span class="section-icon">🎬</span>
+                    Detected Videos
+                </h2>
+                <div class="video-list" id="videoList">
+                    <div class="no-videos" id="noVideos">
+                        <span class="no-videos-icon">📡</span>
+                        <p>No videos detected on this page</p>
+                        <small>Play a video to detect streams</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quality Setting -->
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Stream Quality</span>
+                    <span class="setting-desc">Auto adjusts based on connection</span>
+                </div>
+                <select id="qualitySelect" class="select-input">
+                    <option value="auto">Auto</option>
+                    <option value="1080p">1080p</option>
+                    <option value="720p">720p</option>
+                    <option value="480p">480p</option>
+                    <option value="360p">360p</option>
+                </select>
+            </div>
+
+            <!-- Buffer Size -->
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Buffer Size</span>
+                    <span class="setting-desc">Larger buffer = less buffering</span>
+                </div>
+                <select id="bufferSelect" class="select-input">
+                    <option value="small">Small (15s)</option>
+                    <option value="medium" selected>Medium (30s)</option>
+                    <option value="large">Large (60s)</option>
+                </select>
+            </div>
+
+            <!-- Stats Section -->
+            <div class="stats-section">
+                <h2>Session Stats</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-value" id="dataUsage">0 MB</span>
+                        <span class="stat-label">Data Saved</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="streamsDetected">0</span>
+                        <span class="stat-label">Streams</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="popup-footer">
+            <button id="clearVideos" class="footer-btn">Clear Detected</button>
+            <a href="#" id="settingsLink">Advanced Settings</a>
+        </footer>
+    </div>
+
+    <script src="popup.js" type="module"></script>
+</body>
+
+</html>
