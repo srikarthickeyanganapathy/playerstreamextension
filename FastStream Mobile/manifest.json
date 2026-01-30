@@ -1,27 +1,22 @@
 {
     "manifest_version": 3,
-    "name": "FastStream Mobile",
-    "version": "1.0.0",
-    "description": "High-performance streaming optimization for mobile browsers",
-    "browser_specific_settings": {
-        "gecko": {
-            "id": "faststream-mobile@extension.dev",
-            "strict_min_version": "113.0"
-        }
-    },
+    "name": "FastStream Mobile 2.0",
+    "version": "2.0.0",
+    "description": "Production-grade MSE streaming optimizer for mobile.",
     "permissions": [
         "declarativeNetRequest",
         "declarativeNetRequestWithHostAccess",
-        "activeTab",
+        "webRequest",
         "storage",
+        "unlimitedStorage",
         "scripting",
-        "webRequest"
+        "activeTab"
     ],
     "host_permissions": [
-        "*://*/*"
+        "<all_urls>"
     ],
     "background": {
-        "service_worker": "background/background.mjs",
+        "service_worker": "background/engine.js",
         "type": "module"
     },
     "content_scripts": [
@@ -30,17 +25,17 @@
                 "<all_urls>"
             ],
             "js": [
-                "content/content.js"
+                "content/sniffer.js"
             ],
-            "run_at": "document_end"
+            "run_at": "document_start",
+            "all_frames": true
         }
     ],
     "web_accessible_resources": [
         {
             "resources": [
-                "player/index.html",
-                "player/*",
-                "icons/*"
+                "content/interceptor.js",
+                "content/player-overlay.js"
             ],
             "matches": [
                 "<all_urls>"
@@ -49,16 +44,10 @@
     ],
     "action": {
         "default_popup": "popup/popup.html",
-        "default_title": "FastStream Mobile - No video detected",
         "default_icon": {
-            "16": "icons/icon-16.png",
-            "48": "icons/icon-48.png",
-            "128": "icons/icon-128.png"
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
         }
-    },
-    "icons": {
-        "16": "icons/icon-16.png",
-        "48": "icons/icon-48.png",
-        "128": "icons/icon-128.png"
     }
 }
