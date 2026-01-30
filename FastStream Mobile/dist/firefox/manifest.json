@@ -40,9 +40,14 @@
   "web_accessible_resources": [
     {
       "resources": [
+<<<<<<< Updated upstream
         "player/index.html",
         "player/*",
         "icons/*"
+=======
+        "content/interceptor.js",
+        "content/overlay/*"
+>>>>>>> Stashed changes
       ],
       "matches": [
         "<all_urls>"
