@@ -35,6 +35,8 @@ const FILES_TO_COPY = [
     'player/GestureManager.js',
     'player/player.js',
     'player/player.css',
+    'player/ui_extensions.js',
+    'player/ui_extensions.css',
     'player/lib',  // Bundled HLS.js and Dash.js for MV3 CSP compliance
     'popup/popup.html',
     'popup/popup.css',

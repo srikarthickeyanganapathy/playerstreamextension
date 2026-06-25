@@ -121,15 +121,25 @@ function createVideoItem(video, index) {
         'ts-segment': '#607d8b'
     };
 
-    const badgeColor = typeColors[video.type] || '#666';
+    // Normalize type for display
+    let displayType = video.type.toLowerCase();
+    if (displayType.includes('mpegurl') || displayType.includes('hls')) {
+        displayType = 'hls';
+    } else if (displayType.includes('dash')) {
+        displayType = 'dash';
+    } else if (displayType.includes('mp2t') || displayType.includes('ts-segment')) {
+        displayType = 'ts-segment';
+    }
+
+    const badgeColor = typeColors[displayType] || '#666';
 
     item.innerHTML = `
     <div class="video-info">
-      <span class="video-type" style="background: ${badgeColor}">${video.type.toUpperCase()}</span>
+      <span class="video-type" style="background: ${badgeColor}">${displayType.toUpperCase()}</span>
       <span class="video-url" title="${video.url}">${displayUrl}</span>
     </div>
     <div class="video-actions">
-      <button class="play-btn" data-url="${video.url}" title="Play in FastStream">▶</button>
+      <button class="play-btn" data-url="${video.url}" data-type="${video.type}" data-frame="${video.frameId}" title="Play in FastStream">▶</button>
       <button class="copy-btn" data-url="${video.url}" title="Copy URL">📋</button>
     </div>
   `;
@@ -137,7 +147,9 @@ function createVideoItem(video, index) {
     // Add play functionality
     item.querySelector('.play-btn').addEventListener('click', async (e) => {
         const url = e.target.dataset.url;
-        await openInPlayer(url);
+        const type = e.target.dataset.type;
+        const frameId = e.target.dataset.frame;
+        await openInPlayer(url, type, frameId);
     });
 
     // Add copy functionality
@@ -157,16 +169,19 @@ function createVideoItem(video, index) {
 /**
  * Open video URL in FastStream player
  * @param {string} url - Video URL to play
+ * @param {string} type - Stream type
+ * @param {string|number} frameId - Target frame ID
  */
-async function openInPlayer(url) {
+async function openInPlayer(url, type, frameId) {
     if (!currentTabId) return;
 
     try {
         // Try to inject player into the page
+        const messageOpts = frameId && frameId !== 'undefined' ? { frameId: parseInt(frameId) } : {};
         await chrome.tabs.sendMessage(currentTabId, {
             type: 'OPEN_PLAYER',
-            payload: { url }
-        });
+            payload: { url, type }
+        }, messageOpts);
 
         // Close popup after launching player
         window.close();
@@ -175,7 +190,8 @@ async function openInPlayer(url) {
         // Fallback: open in new tab
         const playerUrl = chrome.runtime.getURL('player/index.html');
         const encodedUrl = encodeURIComponent(url);
-        chrome.tabs.create({ url: `${playerUrl}?url=${encodedUrl}` });
+        const encodedType = encodeURIComponent(type || '');
+        chrome.tabs.create({ url: `${playerUrl}?url=${encodedUrl}${type ? `&type=${encodedType}` : ''}` });
         window.close();
     }
 }

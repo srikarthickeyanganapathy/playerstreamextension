@@ -1,20 +1,26 @@
 /**
- * FastStream Mobile - Background Service Worker (The Brain)
- * Detects video streams, captures headers, and manages extension state
+ * FastStream Mobile - Background Service Worker
+ * Handles network sniffing and video detection via MIME types
  */
-
-import { RuleManager } from './NetRequestRuleManager.mjs';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
-const VIDEO_EXTENSIONS = ['.m3u8', '.mpd', '.mp4', '.webm', '.ts', '.m4s', '.webp', '.jpg', '.png', '.jpeg'];
-const EXTENSION_ID = chrome.runtime.id;
-const ruleManager = new RuleManager();
+const TARGET_MIME_TYPES = [
+    'video/mp4',
+    'video/webm',
+    'video/ogg',
+    'application/x-mpegurl', // HLS
+    'application/vnd.apple.mpegurl', // HLS (alternate)
+    'application/mpegurl',
+    'audio/mpegurl',
+    'audio/x-mpegurl',
+    'application/dash+xml', // DASH
+    'video/mp2t' // TS segments
+];
 
-// Cache for captured headers: requestId -> headers
-const headerCache = new Map();
+const EXTENSION_ID = chrome.runtime.id;
 
 // Icon paths
 const ICONS = {
@@ -31,73 +37,14 @@ const ICONS = {
 };
 
 // ============================================================================
-// INITIALIZATION
+// VIDEO DETECTION
 // ============================================================================
 
-chrome.runtime.onInstalled.addListener(async (details) => {
-    console.log('[FastStream] Extension installed:', details.reason);
-    await ruleManager.clearAllRules();
-    console.log('[FastStream] Rules cleared');
-});
-
-// ============================================================================
-// VIDEO DETECTION & HEADER CAPTURE
-// ============================================================================
-
-function detectVideoUrl(url) {
-    if (!url) return null;
-    const urlLower = url.toLowerCase();
-
-    // EXCLUSIONS: Skip obvious non-video assets
-    if (urlLower.includes('thumbnail') ||
-        urlLower.includes('poster') ||
-        urlLower.includes('preview') ||
-        urlLower.includes('cover') ||
-        urlLower.includes('avatars') ||
-        urlLower.includes('icons')) {
-        return null;
-    }
-
-    // LIST 1: Unambiguous Video Extensions (Always capture)
-    const CORE_EXTENSIONS = ['.m3u8', '.mpd', '.mp4', '.webm', '.m4s'];
-    for (const ext of CORE_EXTENSIONS) {
-        if (urlLower.includes(ext)) {
-            let type = 'unknown';
-            if (urlLower.includes('.m3u8')) type = 'hls';
-            else if (urlLower.includes('.mpd')) type = 'dash';
-            else if (urlLower.includes('.mp4')) type = 'mp4';
-            else if (urlLower.includes('.webm')) type = 'webm';
-            else if (urlLower.includes('.m4s')) type = 'segment';
-
-            return { url, type, extension: ext, detectedAt: Date.now() };
-        }
-    }
-
-    // LIST 2: Ambiguous Extensions (Segments masquerading as other files)
-    // Only capture if they look like segments (contain 'seg', 'frag', or numeric sequences)
-    const AMBIGUOUS_EXTENSIONS = ['.ts', '.webp', '.jpg', '.png', '.jpeg'];
-
-    for (const ext of AMBIGUOUS_EXTENSIONS) {
-        if (urlLower.includes(ext)) {
-            // Check for segment-like patterns
-            const filename = url.split('/').pop().toLowerCase();
-            const isSegment =
-                filename.includes('seg') ||
-                filename.includes('frag') ||
-                filename.includes('part') ||
-                filename.includes('chunk') ||
-                /-\d+/.test(filename) || // e.g., -001
-                /^\d+/.test(filename);   // e.g., 001.ts
-
-            if (isSegment) {
-                return { url, type: 'segment', extension: ext, detectedAt: Date.now() };
-            }
-        }
-    }
-
-    return null;
-}
-
+/**
+ * Check if the request is initiated by the extension itself
+ * @param {string} initiator - The initiator URL
+ * @returns {boolean}
+ */
 function isOwnExtensionRequest(initiator) {
     if (!initiator) return false;
     return initiator.includes(EXTENSION_ID) ||
@@ -105,83 +52,188 @@ function isOwnExtensionRequest(initiator) {
         initiator.startsWith('moz-extension://');
 }
 
+const requestHeadersMap = new Map();
+
 /**
- * Capture headers from detected streams
+ * Clean up stored headers
  */
+function cleanupHeaders(details) {
+    requestHeadersMap.delete(details.requestId);
+}
+
 if (chrome.webRequest) {
-    // 1. Listen for headers relative to video extensions
-    // Note: We listen to a broad set to ensure we miss nothing, filtered inside
-    chrome.webRequest.onBeforeSendHeaders.addListener(
+    chrome.webRequest.onSendHeaders.addListener(
         (details) => {
             if (details.tabId < 0) return;
             if (isOwnExtensionRequest(details.initiator)) return;
 
-            const videoInfo = detectVideoUrl(details.url);
-            if (videoInfo) {
-                // Store relevant headers
-                const capturedHeaders = {};
-                if (details.requestHeaders) {
-                    for (const h of details.requestHeaders) {
-                        const name = h.name.toLowerCase();
-                        if (['referer', 'origin', 'user-agent', 'cookie', 'authorization'].includes(name)) {
-                            capturedHeaders[h.name] = h.value; // Store with original casing
-                        }
-                    }
+            // Extract important request headers
+            const relevantHeaders = {};
+            for (const h of details.requestHeaders) {
+                const lower = h.name.toLowerCase();
+                if (['origin', 'referer', 'sec-gpc', 'user-agent', 'cookie', 'authorization'].includes(lower)) {
+                    relevantHeaders[lower] = h.value;
                 }
+            }
+            if (Object.keys(relevantHeaders).length > 0) {
+                requestHeadersMap.set(details.requestId, relevantHeaders);
+            }
 
-                // Store in cache
-                headerCache.set(details.url, capturedHeaders);
+            const url = details.url.toLowerCase();
+            const urlWithoutQuery = url.split('?')[0];
+            let type = null;
 
-                // Also trigger detection right here as we have the headers now
-                processDetectedVideo(details.tabId, videoInfo, capturedHeaders);
+            if (urlWithoutQuery.endsWith('.m3u8') || urlWithoutQuery.endsWith('.m3u')) type = 'hls';
+            else if (urlWithoutQuery.endsWith('.mpd')) type = 'dash';
+            else if (urlWithoutQuery.endsWith('.mp4')) type = 'mp4';
+            else if (urlWithoutQuery.endsWith('.webm')) type = 'webm';
+            else if (urlWithoutQuery.endsWith('.ts')) type = 'ts-segment';
+            else if (url.includes('faststream-mode=accelerated_hls') || url.includes('faststream-mode=hls')) type = 'hls';
+            
+            if (type) {
+                console.log('[FastStream] Video detected via URL:', type, details.url);
+                handleDetectedVideo(details.tabId, details.url, type, details.frameId, relevantHeaders);
             }
         },
         { urls: ["<all_urls>"] },
         ["requestHeaders", "extraHeaders"]
     );
+
+    chrome.webRequest.onHeadersReceived.addListener(
+        (details) => {
+            if (details.tabId < 0) return;
+            if (isOwnExtensionRequest(details.initiator)) return;
+
+            const contentTypeHeader = details.responseHeaders.find(
+                h => h.name.toLowerCase() === 'content-type'
+            );
+
+            if (contentTypeHeader) {
+                const contentType = contentTypeHeader.value.toLowerCase().split(';')[0].trim();
+
+                if (TARGET_MIME_TYPES.includes(contentType)) {
+                    console.log('[FastStream] Video detected via MIME:', contentType, details.url);
+                    const capturedHeaders = requestHeadersMap.get(details.requestId) || {};
+                    handleDetectedVideo(details.tabId, details.url, contentType, details.frameId, capturedHeaders);
+                }
+            }
+        },
+        { urls: ["<all_urls>"] },
+        ["responseHeaders"]
+    );
+
+    chrome.webRequest.onCompleted.addListener(cleanupHeaders, { urls: ["<all_urls>"] });
+    chrome.webRequest.onErrorOccurred.addListener(cleanupHeaders, { urls: ["<all_urls>"] });
 }
+
+let nextRuleId = 1;
 
 /**
- * Process a detected video: create rules and notify UI
+ * Handle a detected video stream
+ * @param {number} tabId 
+ * @param {string} url 
+ * @param {string} type 
+ * @param {number} frameId
+ * @param {object} capturedHeaders - Headers captured from the original request
  */
-async function processDetectedVideo(tabId, videoInfo, headers) {
-    console.log(`[FastStream] 🎬 Detected (${videoInfo.type}):`, videoInfo.url);
+async function handleDetectedVideo(tabId, url, type, frameId, capturedHeaders = {}) {
+    const videoInfo = {
+        url,
+        type,
+        frameId,
+        detectedAt: Date.now()
+    };
 
-    // Create dynamic rule to inject these headers for this URL
-    const ruleHeaders = [];
-
-    if (headers) {
-        // Prepare headers for declarativeNetRequest
-        for (const [key, value] of Object.entries(headers)) {
-            // Skip Cookie for now as it's often HttpOnly and sensitive, 
-            // but for many streams Referer/Origin is the key content protection.
-            // Authorization header is critical if present.
-            if (key.toLowerCase() !== 'cookie') {
-                ruleHeaders.push({
-                    header: key,
-                    operation: 'set',
-                    value: value
-                });
+    let streamUrlFilter = url;
+    let customRequestHeaders = [];
+    
+    try {
+        const urlObj = new URL(url);
+        streamUrlFilter = '||' + urlObj.hostname + '/*';
+        
+        // Parse faststream-headers from URL if present
+        const faststreamHeadersStr = urlObj.searchParams.get('faststream-headers');
+        if (faststreamHeadersStr) {
+            try {
+                const parsedHeaders = JSON.parse(decodeURIComponent(faststreamHeadersStr));
+                Object.assign(capturedHeaders, parsedHeaders);
+            } catch (e) {
+                console.warn('[FastStream] Failed to parse faststream-headers from URL', e);
             }
         }
+        
+        customRequestHeaders = Object.keys(capturedHeaders).map(key => ({
+            "header": key.toLowerCase(),
+            "operation": "set",
+            "value": capturedHeaders[key]
+        }));
+    } catch (e) {
+        console.warn('[FastStream] URL parse failed, using exact URL', e);
     }
 
-    // Always ensure Origin matches if not present (spoof based on Referer if available)
-    // Some servers check Origin for CORS
-
-    if (ruleHeaders.length > 0) {
-        try {
-            await ruleManager.addHeaderRule(videoInfo.url, tabId, ruleHeaders);
-            console.log('[FastStream] 🛡️ Spoofing rules added for:', videoInfo.url);
-        } catch (e) {
-            console.error('[FastStream] Failed to add rules:', e);
-        }
+    // 0. CORS / Header Stripping
+    const ruleId = Math.floor(Math.random() * 1000000) + 1;
+    
+    const ruleAction = {
+        "type": "modifyHeaders",
+        "responseHeaders": [
+            { "header": "x-frame-options", "operation": "remove" },
+            { "header": "content-security-policy", "operation": "remove" },
+            { "header": "access-control-allow-origin", "operation": "set", "value": "*" },
+            { "header": "access-control-allow-methods", "operation": "set", "value": "GET, POST, OPTIONS" },
+            { "header": "access-control-allow-headers", "operation": "set", "value": "*" }
+        ]
+    };
+    
+    if (customRequestHeaders.length > 0) {
+        ruleAction.requestHeaders = customRequestHeaders;
     }
 
-    // Store and notify
-    await storeDetectedVideo(tabId, { ...videoInfo, headers });
+    try {
+        await chrome.declarativeNetRequest.updateSessionRules({
+            removeRuleIds: [ruleId],
+            addRules: [{
+                "id": ruleId,
+                "priority": 1,
+                "action": ruleAction,
+                "condition": {
+                    "tabIds": [tabId],
+                    "resourceTypes": ["xmlhttprequest", "media", "sub_frame", "other"]
+                }
+            }]
+        });
+    } catch (e) {
+        console.warn('[FastStream] Failed to update rules:', e);
+    }
+
+    // 1. Storage
+    await storeDetectedVideo(tabId, videoInfo);
+
+    // 2. Icon
+    await setIconState(tabId, 'active');
+
+    // 3. Notify Content Script
+    try {
+        await chrome.tabs.sendMessage(tabId, {
+            action: 'VIDEO_DETECTED',
+            url: url,
+            type: type
+        }, { frameId: frameId });
+    } catch (e) {
+        // Tab might not be ready or content script not injected yet
+        console.warn('[FastStream] Failed to notify tab:', e);
+    }
+
+    // 4. Notify Popup
+    try {
+        await chrome.runtime.sendMessage({
+            type: 'VIDEO_DETECTED',
+            payload: { tabId: tabId, url: url, type: type }
+        });
+    } catch (e) {
+        // Popup might not be open, safe to ignore
+    }
 }
-
 
 // ============================================================================
 // STORAGE & STATE
@@ -189,26 +241,19 @@ async function processDetectedVideo(tabId, videoInfo, headers) {
 
 async function storeDetectedVideo(tabId, videoInfo) {
     try {
-        const data = await chrome.storage.local.get(['detectedVideos', 'streamsDetected']);
+        const data = await chrome.storage.local.get(['detectedVideos']);
         const detectedVideos = data.detectedVideos || {};
-        const streamsDetected = (data.streamsDetected || 0) + 1;
 
         if (!detectedVideos[tabId]) detectedVideos[tabId] = [];
 
-        // Avoid duplicates
-        const existingIndex = detectedVideos[tabId].findIndex(v => v.url === videoInfo.url);
-        if (existingIndex === -1) {
+        // Avoid duplicates checking URL
+        const existing = detectedVideos[tabId].find(v => v.url === videoInfo.url);
+        if (!existing) {
             detectedVideos[tabId].unshift(videoInfo);
+            // Limit to last 10
             if (detectedVideos[tabId].length > 10) detectedVideos[tabId].pop();
 
-            await chrome.storage.local.set({ detectedVideos, streamsDetected });
-            await setIconState(tabId, 'active');
-
-            // Notify Popup
-            chrome.runtime.sendMessage({
-                type: 'VIDEO_DETECTED',
-                payload: { tabId, videoInfo }
-            }).catch(() => { });
+            await chrome.storage.local.set({ detectedVideos });
         }
     } catch (error) {
         console.error('[FastStream] Storage error:', error);
@@ -219,60 +264,16 @@ async function setIconState(tabId, state) {
     try {
         const path = ICONS[state] || ICONS.inactive;
         await chrome.action.setIcon({ tabId, path });
-
-        if (state === 'active') {
-            await chrome.action.setBadgeText({ tabId, text: '●' });
-            await chrome.action.setBadgeBackgroundColor({ tabId, color: '#4CAF50' });
-        } else {
-            await chrome.action.setBadgeText({ tabId, text: '' });
-        }
-    } catch (e) { /* Tab closed */ }
-}
-
-// ============================================================================
-// MESSAGE HANDLING
-// ============================================================================
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    switch (message.type) {
-        case 'GET_DETECTED_VIDEOS':
-            handleGetDetectedVideos(message.payload?.tabId, sendResponse);
-            return true;
-
-        case 'CLEAR_TAB_VIDEOS':
-            handleClearTabVideos(message.payload?.tabId, sendResponse);
-            return true;
-
-        case 'GET_SETTINGS':
-            chrome.storage.local.get(null, (s) => sendResponse({ success: true, data: s }));
-            return true;
+    } catch (e) {
+        // Tab might be closed
     }
-});
-
-async function handleGetDetectedVideos(tabId, sendResponse) {
-    const data = await chrome.storage.local.get('detectedVideos');
-    sendResponse({ success: true, data: data.detectedVideos?.[tabId] || [] });
-}
-
-async function handleClearTabVideos(tabId, sendResponse) {
-    const data = await chrome.storage.local.get('detectedVideos');
-    const detectedVideos = data.detectedVideos || {};
-    delete detectedVideos[tabId];
-    await chrome.storage.local.set({ detectedVideos });
-    await setIconState(tabId, 'inactive');
-    sendResponse({ success: true });
 }
 
 // ============================================================================
-// CLEANUP
+// CLEANUP & TAB MANAGEMENT
 // ============================================================================
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo.status === 'loading' && changeInfo.url) {
-        setIconState(tabId, 'inactive');
-    }
-});
-
+// Clear data when tab is closed
 chrome.tabs.onRemoved.addListener(async (tabId) => {
     const data = await chrome.storage.local.get('detectedVideos');
     if (data.detectedVideos?.[tabId]) {
@@ -280,3 +281,39 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
         await chrome.storage.local.set({ detectedVideos: data.detectedVideos });
     }
 });
+
+// Reset icon when tab is updated (navigated)
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === 'loading') {
+        setIconState(tabId, 'inactive');
+    }
+});
+
+// Handle messages from popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'GET_DETECTED_VIDEOS') {
+        const tabId = message.payload.tabId;
+        chrome.storage.local.get(['detectedVideos']).then(data => {
+            const videos = (data.detectedVideos && data.detectedVideos[tabId]) ? data.detectedVideos[tabId] : [];
+            sendResponse({ success: true, data: videos });
+        }).catch(err => {
+            sendResponse({ success: false, error: err.message });
+        });
+        return true; // Keep message channel open for async response
+    }
+    if (message.type === 'CLEAR_TAB_VIDEOS') {
+        const tabId = message.payload.tabId;
+        chrome.storage.local.get(['detectedVideos']).then(data => {
+            if (data.detectedVideos && data.detectedVideos[tabId]) {
+                delete data.detectedVideos[tabId];
+                chrome.storage.local.set({ detectedVideos: data.detectedVideos }).then(() => {
+                    sendResponse({ success: true });
+                });
+            } else {
+                sendResponse({ success: true });
+            }
+        });
+        return true;
+    }
+});
+
